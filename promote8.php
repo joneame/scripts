@@ -416,7 +416,7 @@ function twitter_post($link) {
         $api_url = 'https://api.twitter.com/1.1/statuses/update.json';
     }
 
-    $title = text_to_summary($link->title, $title_len);
+    $title = text_sub_text($link->title, $title_len);
     $permalink = $link->get_permalink();
     $message = "{$title} | {$permalink}";
     $api_args['status'] = $message;
