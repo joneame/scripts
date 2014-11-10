@@ -38,7 +38,7 @@ $now = time();
 $output = "<p><b>Ejecutado</b>: ".get_date_time($now)."<br/><br/>\n";
 
 $from_time = "date_sub(now(), interval 5 day)";
-#$from_where = "FROM votes, links WHERE  
+#$from_where = "FROM votes, links WHERE
 
 //hora ultima publicada
 $last_published = $db->get_var("SELECT SQL_NO_CACHE UNIX_TIMESTAMP(max(link_date)) from links WHERE link_status='published'");
@@ -111,7 +111,7 @@ foreach ($db_metas as $dbmeta) {
    $y = (int) $db->get_var("select SQL_NO_CACHE count(*) from links, categories where link_status in ('published', 'queued') and link_date > date_sub(now(), interval $days day) and link_category = category_id and category_parent = $meta");
   $z = (int) $db->get_var("select SQL_NO_CACHE count(*) from links, categories where link_date > date_sub(now(), interval $days day ) and link_category = category_id and category_parent = $meta");
 
-    
+
 if ($y == 0) $y = 1;
     $meta_coef[$meta] = $x/$y;
     if ($total_published == 0) $total_published = 1;
@@ -119,7 +119,7 @@ if ($y == 0) $y = 1;
 $meta_avg = 0;
     $meta_avg += $meta_coef[$meta] / count($db_metas);
     $output .= "estadísticas de $days días para <b>$meta_names[$meta]</b> en cola y publicadas: $y,  De $z totales, $x han sido publicadas<br/>";
-    
+
 }
 $output.= "<br/>";
 
@@ -172,11 +172,11 @@ if (!$rows) {
     }
     die;
 }
-    
+
 $max_karma_found = 0;
 $best_link = 0;
 $best_karma = 0;
-$output .= "<table>\n";    
+$output .= "<table>\n";
 if ($links) {
     $output .= "<tr class='thead'><th>votos</th><th>anonimos</th><th>negativos</th><th>carisma</th><th>categoria</th><th>titulo</th><th></th></tr>\n";
     $i=0;
@@ -191,10 +191,10 @@ if ($links) {
         $karma_pos_user = 0;
         $karma_neg_user = 0;
         $karma_pos_ano = 0;
-       
+
         // Otherwise use normal decayed min_karma
         $karma_threshold = $min_karma;
-   
+
 
         $karma_new = $link->karma;
         $link->message = '';
@@ -211,7 +211,7 @@ if ($links) {
             $link->message .= 'Ultima publicada del mismo sitio: Hace '. intval((time() - $last_site_published)/3600) . ' horas.<br/>';
         }
 
-        
+
         if(($ban = check_ban($link->url, 'hostname', false, true))) {
             // Check if the  domain is banned
             $karma_new *= 0.5;
@@ -238,17 +238,17 @@ if ($links) {
 
         $link->karma = round($karma_new);
 
-        if (! DEBUG && $link->thumb_status == 'unknown') 
+        if (! DEBUG && $link->thumb_status == 'unknown')
 		$link->get_thumb();
 
         if (($link->votes >= $min_votes && $karma_new >= $karma_threshold && $published < $max_to_publish)) {
             $published++;
             $link->karma = round($karma_new);
-           
+
             publish($link);
-            $changes = 1; // to show a "published" later    
+            $changes = 1; // to show a "published" later
         } else {
-            if (( $must_publish || $link->karma > $min_past_karma) 
+            if (( $must_publish || $link->karma > $min_past_karma)
                         && $link->karma > $limit_karma && $link->karma > $last_resort_karma &&
                         $link->votes > $link->negatives*20) {
                 $last_resort_id = $link->id;
@@ -261,7 +261,7 @@ if ($links) {
         $i++;
     }
 
-    if (! DEBUG && $published == 0 && $links_published_projection < $pub_estimation * 0.9 
+    if (! DEBUG && $published == 0 && $links_published_projection < $pub_estimation * 0.9
             && $must_publish && $last_resort_id  > 0) {
         // Publish last resort
         $link = new Link;
@@ -317,18 +317,16 @@ function print_row($link, $changes, $log = '') {
 function publish($link) {
     global $globals, $db;
 
-    $short_url = catlink($link->get_permalink());
-
     if (DEBUG) return;
 
     // Calculate votes average
-    
+
     $votes_avg = (float) $db->get_var("select SQL_NO_CACHE avg(vote_value) from votes, users where vote_type='links' AND vote_link_id=$link->id and vote_user_id > 0 and vote_value > 0 and vote_user_id = user_id and user_level !='disabled'");
-  
+
     if ($votes_avg < $globals['users_karma_avg']) $link->votes_avg = max($votes_avg, $globals['users_karma_avg']*0.97);
     else $link->votes_avg = $votes_avg;
 
-        
+
     $db->query("update links set link_status='published', link_date=now(), link_votes_avg=$link->votes_avg where link_id=$link->id");
 
     // Increase user's karma
@@ -336,73 +334,92 @@ function publish($link) {
     $user->id = $link->author;
     if ($user->read()) {
         $user->karma = min(30, $user->karma + 1);
-        $user->previous_carisma = $user->karma; 
+        $user->previous_carisma = $user->karma;
         $user->store();
         $annotation = new Annotation("karma-$user->id");
         $annotation->append(_('Noticia publicada').": +1, carisma: $user->karma\n");
     }
-     
+
     // Recheck for images, some sites add images after the article has been published
     if ($link->thumb_status != 'local' && $link->thumb_status != 'deleted') $link->get_thumb();
-       
+
     //Add the publish event/log
     log_insert('link_publish', $link->id, $link->author);
-    twitter_post($link->title, $short_url);
+    twitter_post($link);
 
 }
 
-function twitter_post($titulo, $short_url) {
-    if (!class_exists("OAuth")) {
-            syslog(LOG_NOTICE, "Joneame: pecl/oauth is not installed");
-            return;
+function request_image($url) {
+    /* downloads the link, checks whether it's an image and saves and returns its path (or not) */
+    $max_size = 1024 * 1024 * 3;
+    $promote_tmp_dir = "/tmp/jnm-promote";
+    if (!is_dir($promote_tmp_dir)) {
+        mkdir($promote_tmp_dir, 755);
+    }
+    $file = $promote_tmp_dir."/".md5($url);
+
+    $fh = fopen($file, "wb");
+    $curl = curl_init();
+    curl_setopt($curl, CURLOPT_URL, $url);
+    curl_setopt($curl, CURLOPT_HEADER, 0);
+    curl_setopt($curl, CURLOPT_FILE, $fh);
+    curl_setopt($curl, CURLOPT_PROGRESSFUNCTION, function($dl_size, $dl_progress, $ul_size, $ul_progress) {
+        return ($dl_progress > $max_size);
+    });
+    $status = curl_exec($curl);
+    curl_close($curl);
+    fclose($fh);
+
+    /* twitter does not let us post images larger than 3MB */
+    if ($status === false || filesize($file) > $max_size) {
+        return false;
     }
 
-    $conskey = $globals['oauth']['twitter']['consumer_key'];
-    $conssec = $globals['oauth']['twitter']['consumer_secret'];
+    $finfo = new finfo(FILEINFO_MIME_TYPE);
+    $mimetype = $finfo->file($file);
 
+    if (!in_array($mimetype, ['image/jpeg', 'image/png', 'image/gif'])) {
+        return false;
+    }
+
+    return $file;
+}
+
+function twitter_post($link) {
+    global $globals;
+
+    if (!class_exists("OAuth")) {
+        syslog(LOG_NOTICE, "Joneame: pecl/oauth is not installed");
+        return;
+    }
+
+    $consumer_key = $globals['oauth']['twitter']['consumer_key'];
+    $consumer_secret = $globals['oauth']['twitter']['consumer_secret'];
     $oauth_token = $globals['oauth']['twitter']['oauth_token'];
     $oauth_token_secret = $globals['oauth']['twitter']['oauth_token_secret'];
-
-    $msg = text_to_summary($titulo, 115) . ' | ' . $short_url;
     $req_url = 'http://twitter.com/oauth/request_token';
     $acc_url = 'http://twitter.com/oauth/access_token';
     $authurl = 'http://twitter.com/oauth/authorize';
-    $api_url = 'https://api.twitter.com/1.1/statuses/update.json';
-
-    $oauth = new OAuth($conskey, $conssec,OAUTH_SIG_METHOD_HMACSHA1,OAUTH_AUTH_TYPE_URI);
-
+    $oauth = new OAuth($consumer_key, $consumer_secret, OAUTH_SIG_METHOD_HMACSHA1, OAUTH_AUTH_TYPE_URI);
+    $oauth->setRequestEngine(OAUTH_REQENGINE_CURL);
     $oauth->setToken($oauth_token, $oauth_token_secret);
 
-    $api_args = array('status' => $msg);
-
-    /* No using geo yet
-    if (isset($entry['lat'])) {
-        $api_args['lat'] = $entry['lat'];
-        $api_args['long'] = $entry['long'];
+    $image = request_image($link->url);
+    if ($image) {
+        $title_len = 90;
+        $api_url = 'https://api.twitter.com/1.1/statuses/update_with_media.json';
+        $api_args['@media[]'] = "@{$image}";
+    } else {
+        $title_len = 110;
+        $api_url = 'https://api.twitter.com/1.1/statuses/update.json';
     }
-    */
 
-    $oauth->fetch($api_url, $api_args, OAUTH_HTTP_METHOD_POST,array("User-Agent" => "pecl/oauth"));
-}
+    $title = text_to_summary($link->title, $title_len);
+    $permalink = $link->get_permalink();
+    $message = "{$title} | {$permalink}";
+    $api_args['status'] = $message;
 
-function fon_gs($url) {
-    if (!function_exists('curl_init')) {
-        syslog(LOG_NOTICE, "Joneame: curl is not installed");
-        return $url;
-    }
-    $gs_url = 'http://fon.gs/create.php?url='.urlencode($url);
-    $session = curl_init();
-    curl_setopt($session, CURLOPT_URL, $gs_url);
-    curl_setopt($session, CURLOPT_USERAGENT, "joneame.net");
-    curl_setopt($session, CURLOPT_CONNECTTIMEOUT, 10);
-    curl_setopt($session, CURLOPT_RETURNTRANSFER, 1);
-    curl_setopt($session, CURLOPT_TIMEOUT, 20);
-    $result = curl_exec($session);
-    curl_close($session);
-    if (preg_match('/^OK/', $result)) {
-        $array = explode(' ', $result);
-        return $array[1];
-    } else return $url;
+    $oauth->fetch($api_url, $api_args, OAUTH_HTTP_METHOD_POST);
 }
 
 function catlink($url) {
