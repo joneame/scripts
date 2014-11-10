@@ -1,12 +1,14 @@
 <?php
 // The source code packaged with this file is Free Software, Copyright (C) 2005 by
-// Ricardo Galli <gallir at uib dot es>
+// Ricardo Galli <gallir at uib dot es> and the Jonéame Development Team (admin@joneame.net)
 // It's licensed under the AFFERO GENERAL PUBLIC LICENSE unless stated otherwise.
 // You can get copies of the licenses here:
 // 		http://www.affero.org/oagpl.html
 // AFFERO GENERAL PUBLIC LICENSE is also included in the file called "COPYING".
 
-include(__DIR__.'/../config.php');
+$install_dir = "/srv/http/joneame.net";
+
+include($install_dir.'/config.php');
 include(mnminclude.'link.php');
 include(mnminclude.'user.php');
 include_once(mnminclude.'log.php');
@@ -92,7 +94,7 @@ $min_karma = round(max($past_karma * $decay, 20));
 if ($decay >= 1) $max_to_publish = 5;
 else $max_to_publish = 3;
 
-$min_votes = 7;
+$min_votes = 3;
 /////////////
 
 $limit_karma = round(min($past_karma,$min_karma) * 0.65);

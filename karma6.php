@@ -6,7 +6,9 @@
 // 		http://www.affero.org/oagpl.html
 // AFFERO GENERAL PUBLIC LICENSE is also included in the file called "COPYING".
 
-require(__DIR__.'/../config.php');
+$install_dir = "/srv/http/joneame.net";
+
+include($install_dir.'/config.php');
 require(mnminclude.'user.php');
 require(mnminclude.'annotation.php');
 
@@ -154,7 +156,7 @@ while ($dbuser = mysql_fetch_object($result)) {
 ////// Calculates karma received from votes to links
 
         $total_user_links=intval($db->get_var("SELECT SQL_NO_CACHE count(distinct link_id) FROM links, votes WHERE link_author = $user->id and vote_type='links' and vote_link_id = link_id and vote_date > $history_from and link_status not in ('autodiscard')"));
-        
+
         if ($total_user_links > 0) {
             $positive_karma_received = $negative_karma_received = 0;
             $karmas = $db->get_col("SELECT SQL_NO_CACHE link_karma FROM links WHERE link_author = $user->id and link_date > $history_from and link_karma > 0 and link_status in ('published', 'queued')");
@@ -172,7 +174,7 @@ while ($dbuser = mysql_fetch_object($result)) {
             $karma_received = $positive_karma_received - $negative_karma_received;
             $karma1 = min(12, $karma_received);
             $karma1 = max(-12, $karma1);
-            
+
             // Check if the user has links tagged as abuse
             $link_abuse = (int) $db->get_var("select count(*) from links where link_author = $user->id and link_date > $history_from and link_status = 'abuse'");
             if ($link_abuse > 0) {
@@ -185,14 +187,14 @@ while ($dbuser = mysql_fetch_object($result)) {
 
             $output .= _('carisma recibido en envíos propios->').": ";
             $output .= sprintf("%4.2f\n", $karma_received);
-        } 
+        }
 
         $user_votes = $db->get_row("SELECT SQL_NO_CACHE count(*) as count, $sql_points_calc FROM votes,links WHERE vote_type='links' and vote_user_id = $user->id and link_date > $history_from  and vote_value > 0 AND link_id = vote_link_id AND link_status = 'published' and vote_date < link_date and link_author != $user->id");
         $published_points = (int) $user_votes->points;
         $published_given = (int) $user_votes->count;
-        if ($user_votes->points > 0) 
+        if ($user_votes->points > 0)
             $published_average = $published_points/$published_given;
-        else 
+        else
             $published_average = 0;
 
         $nopublished_given = (int) $db->get_var("SELECT SQL_NO_CACHE count(*) FROM votes,links WHERE vote_type='links' and vote_user_id = $user->id and vote_date > $history_from and vote_date < $ignored_nonpublished and vote_value > 0 AND link_id = vote_link_id AND link_status != 'published' and link_author != $user->id");
@@ -220,8 +222,8 @@ while ($dbuser = mysql_fetch_object($result)) {
         //echo "Published giveN: $published_given Published links: $published_links No published: $nopublished_given Comments: $total_comments Links: $sent_links Average: $published_average\n";
         // Bot and karmawhoring warning!!!
         if ($karma2 > 0 && $published_given > $published_links/10 && $published_given > $nopublished_given*1.5 &&
-                ($published_average < 0.50 || 
-                ($total_comments < $published_given/2 && $sent_links == 0)) 
+                ($published_average < 0.50 ||
+                ($total_comments < $published_given/2 && $sent_links == 0))
             ) {
             $penalized = 1;
 /*            if ($total_comments == 0 && $sent_links == 0) {
@@ -254,7 +256,7 @@ while ($dbuser = mysql_fetch_object($result)) {
        /* if ($negative_no_discarded > $negative_discarded/4) { // To fight against karma whores and bots
             $karma3 = $points_discarded * ($negative_discarded - $negative_no_discarded);
         } */
-        
+
         if ($karma3 != 0) {
             $output .= _('votos negativos a descartadas').": $negative_discarded, "._('no descartadas').": $negative_no_discarded: -> ";
             $output .= sprintf("%4.2f\n", $karma3);
@@ -272,7 +274,7 @@ while ($dbuser = mysql_fetch_object($result)) {
 
         $comment_votes_count = (int) $db->get_var("SELECT SQL_NO_CACHE count(*) from votes, comments where comment_user_id = $user->id and comment_date > $history_from and vote_type='comments' and vote_link_id = comment_id and  vote_date > $history_from and vote_user_id != $user->id");
         if ($comment_votes_count > 10)  {
-            // It calculates a coefficient for the karma, 
+            // It calculates a coefficient for the karma,
             // if number of distinct votes comments >= 10 -> coef = 1, if comments = 1 -> coef = 0.1
             $distinct_votes_count = (int) $db->get_var("SELECT SQL_NO_CACHE count(distinct comment_id) from votes, comments where comment_user_id = $user->id and comment_date > $history_from and vote_type='comments' and vote_link_id = comment_id and vote_user_id != $user->id");
             $distinct_user_votes_count = (int) $db->get_var("SELECT SQL_NO_CACHE count(distinct vote_user_id) from votes, comments where comment_user_id = $user->id and comment_date > $history_from and vote_type='comments' and vote_link_id = comment_id and vote_user_id != $user->id");
@@ -283,12 +285,12 @@ while ($dbuser = mysql_fetch_object($result)) {
             $comment_votes_sum = (int) $db->get_var("SELECT SQL_NO_CACHE sum(vote_value) from votes, comments where comment_user_id = $user->id and comment_date > $history_from and vote_type='comments' and vote_link_id = comment_id and vote_date > $history_from and vote_user_id != $user->id");
             $karma4 = max(-$comment_votes, min($comment_votes_sum / ($comment_votes_count*10) * $comment_votes, $comment_votes)) * $comment_coeff ;
         }
-        
+
         // Limit karma to users that does not send links and does not vote
         if ( $karma4 > 0 && $karma1 == 0 && $karma2 == 0 && $karma3 == 0 ) $karma4 = $karma4 * 0.5;
         if ($karma4 != 0) {
             $output .= _('votos a tus comentarios').": $comment_votes_count (carisma: $comment_votes_sum)-> ";
-            $output .= sprintf("%4.2f\n", $karma4);    
+            $output .= sprintf("%4.2f\n", $karma4);
         }
 
         // Penalize to unfair negative comments' votes
@@ -303,7 +305,7 @@ while ($dbuser = mysql_fetch_object($result)) {
         if ($karma5 != 0) {
             $penalized = 1;
             $output .= _('exceso de votos negativos injustos a comentarios.').": $negative_abused_comment_votes_count, ->reducido a la mitad: ";
-            $output .= sprintf("%4.2f\n", $karma5);    
+            $output .= sprintf("%4.2f\n", $karma5);
         }
 
         $karma_extra = $karma0+$karma_received+$karma2+$karma3+$karma4+$karma5;
@@ -338,7 +340,7 @@ while ($dbuser = mysql_fetch_object($result)) {
         }
         /* Admin manually carisma reduction */
         if ($old_karma != $user->previous_carisma) {
-            $user->karma = $user->previous_carisma; //restore carisma 
+            $user->karma = $user->previous_carisma; //restore carisma
 
         }
            $user->previous_carisma = $user->karma;
@@ -349,7 +351,7 @@ while ($dbuser = mysql_fetch_object($result)) {
                 $user->level = 'normal';
             }
         }
-        $output .= sprintf(_('carisma final').": %4.2f,  ".('cálculo actual').": %4.2f, ".('carisma anterior').": %4.2f\n", 
+        $output .= sprintf(_('carisma final').": %4.2f,  ".('cálculo actual').": %4.2f, ".('carisma anterior').": %4.2f\n",
                     $user->karma, $karma, $old_karma);
         $user->store();
         // If we run in the same server as the database master, wait few milliseconds
