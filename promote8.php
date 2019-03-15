@@ -160,8 +160,6 @@ $sort = "ORDER BY link_karma DESC, link_votes DESC";
 $links = $db->get_results("SELECT SQL_NO_CACHE link_id, link_karma as karma from links, users, categories where $where $sort LIMIT 30");
 $rows = $db->num_rows;
 
-print "SELECT SQL_NO_CACHE link_id, link_karma as karma, category_parent as parent from links, users, categories where $where $sort LIMIT 30";
-
 if (!$rows) {
     $output .= "No hay artículos<br/>\n";
     $output .= "--------------------------<br/>\n";
